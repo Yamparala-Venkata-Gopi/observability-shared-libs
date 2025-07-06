@@ -51,6 +51,31 @@ const (
 	serverRandomLength_bytes            = 32
 	serverCiphersuiteLength_bytes       = 2
 	serverCompressionMethodLength_bytes = 1
+
+	// Minimum number of bytes needed before we can determine whether we can
+	// accept some bytes as a TLS ClientKeyExchange message.
+	//
+	// We read through to the encrypted pre-master secret length, to have better 
+	// assurance that we don't accidentally match against something else.
+	//
+	//   Record header (5 bytes)
+	//     16 - handshake record
+	//     03 03 - protocol version 3.3 (TLS 1.2)
+	//     XX XX - bytes of handshake message follows
+	//
+	//   Handshake header (4 bytes)
+	//     10 - ClientKeyExchange
+	//     XX XX XX - bytes of ClientKeyExchange follows
+	//
+	//   Pre-master secret length (2 bytes)
+	//     XX XX - length of encrypted pre-master secret
+	minTLSClientKeyExchangeLength_bytes = 11
+
+	// TLS handshake message types
+	tlsHandshakeTypeClientHello      = 0x01
+	tlsHandshakeTypeServerHello      = 0x02
+	tlsHandshakeTypeCertificate      = 0x0b
+	tlsHandshakeTypeClientKeyExchange = 0x10
 )
 
 type tlsExtensionID uint16

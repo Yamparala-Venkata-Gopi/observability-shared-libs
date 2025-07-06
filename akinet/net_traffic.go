@@ -232,6 +232,29 @@ var _ ParsedNetworkContent = (*TLSServerHello)(nil)
 func (TLSServerHello) implParsedNetworkContent() {}
 func (TLSServerHello) ReleaseBuffers()           {}
 
+// Represents metadata from an observed TLS ClientKeyExchange message.
+// This message contains the encrypted pre-master secret that is needed
+// for TLS decryption when using RSA key exchange.
+type TLSClientKeyExchange struct {
+	// Identifies the TCP connection to which this message belongs.
+	ConnectionID akid.ConnectionID
+
+	// The encrypted pre-master secret. This is encrypted with the server's
+	// public RSA key and needs to be decrypted with the corresponding private key.
+	EncryptedPreMasterSecret []byte
+
+	// The TLS version from the handshake
+	Version uint16
+
+	// Timestamp when this message was observed
+	ObservationTime time.Time
+}
+
+var _ ParsedNetworkContent = (*TLSClientKeyExchange)(nil)
+
+func (TLSClientKeyExchange) implParsedNetworkContent() {}
+func (TLSClientKeyExchange) ReleaseBuffers()           {}
+
 // Metadata from an observed TLS handshake.
 type TLSHandshakeMetadata struct {
 	// Uniquely identifies the underlying TCP connection.
@@ -255,8 +278,13 @@ type TLSHandshakeMetadata struct {
 	// encrypted in TLS 1.3, so this is only populated for TLS 1.2 connections.
 	SubjectAlternativeNames []string
 
-	clientHandshakeSeen bool
-	serverHandshakeSeen bool
+	// The encrypted pre-master secret from the ClientKeyExchange message.
+	// This is only populated for TLS 1.2 connections with RSA key exchange.
+	EncryptedPreMasterSecret []byte
+
+	clientHandshakeSeen     bool
+	serverHandshakeSeen     bool
+	clientKeyExchangeSeen   bool
 }
 
 var _ ParsedNetworkContent = (*TLSHandshakeMetadata)(nil)
@@ -266,6 +294,12 @@ func (TLSHandshakeMetadata) ReleaseBuffers()           {}
 
 func (tls *TLSHandshakeMetadata) HandshakeComplete() bool {
 	return tls.clientHandshakeSeen && tls.serverHandshakeSeen
+}
+
+// HandshakeCompleteWithKeyExchange returns true if we have seen all the handshake
+// messages needed for TLS decryption, including the ClientKeyExchange message.
+func (tls *TLSHandshakeMetadata) HandshakeCompleteWithKeyExchange() bool {
+	return tls.clientHandshakeSeen && tls.serverHandshakeSeen && tls.clientKeyExchangeSeen
 }
 
 func (tls *TLSHandshakeMetadata) AddClientHello(hello *TLSClientHello) error {
@@ -313,6 +347,23 @@ func (tls *TLSHandshakeMetadata) AddServerHello(hello *TLSServerHello) error {
 	}
 
 	tls.SubjectAlternativeNames = append(tls.SubjectAlternativeNames, hello.DNSNames...)
+
+	return nil
+}
+
+func (tls *TLSHandshakeMetadata) AddClientKeyExchange(keyExchange *TLSClientKeyExchange) error {
+	if tls.ConnectionID != keyExchange.ConnectionID {
+		return errors.Errorf("mismatched connections: %s and %s", akid.String(tls.ConnectionID), akid.String(keyExchange.ConnectionID))
+	}
+
+	if tls.clientKeyExchangeSeen {
+		return errors.Errorf("multiple client key exchanges seen for connection %s", akid.String(tls.ConnectionID))
+	}
+	tls.clientKeyExchangeSeen = true
+
+	// Make a local copy of the encrypted pre-master secret
+	tls.EncryptedPreMasterSecret = make([]byte, len(keyExchange.EncryptedPreMasterSecret))
+	copy(tls.EncryptedPreMasterSecret, keyExchange.EncryptedPreMasterSecret)
 
 	return nil
 }
