@@ -1,6 +1,9 @@
 package tls
 
 import (
+	"fmt"
+	"log"
+	
 	"github.com/akitasoftware/akita-libs/akinet"
 	"github.com/akitasoftware/akita-libs/memview"
 	"github.com/google/gopacket/reassembly"
@@ -28,7 +31,8 @@ func (f *tlsClientKeyExchangeParserFactory) Accepts(input memview.MemView, isEnd
 	}
 
 	// Check if this looks like a TLS handshake record
-	if input.GetByte(0) != 0x16 {
+	recordType := input.GetByte(0)
+	if recordType != 0x16 {
 		return akinet.Reject, input.Len()
 	}
 
@@ -51,10 +55,17 @@ func (f *tlsClientKeyExchangeParserFactory) Accepts(input memview.MemView, isEnd
 
 	// Check if this is a ClientKeyExchange message (0x10)
 	handshakeType := input.GetByte(5)
+	
+	// Debug logging
+	log.Printf("🔍 ClientKeyExchange Parser: recordType=0x%02x, version=0x%04x, handshakeType=0x%02x, expected=0x%02x", 
+		recordType, version, handshakeType, tlsHandshakeTypeClientKeyExchange)
+	
 	if handshakeType != tlsHandshakeTypeClientKeyExchange {
+		log.Printf("❌ ClientKeyExchange Parser: Rejecting - handshake type mismatch")
 		return akinet.Reject, input.Len()
 	}
 
+	log.Printf("✅ ClientKeyExchange Parser: Accepting message")
 	// This looks like a ClientKeyExchange message
 	return akinet.Accept, 0
 }
