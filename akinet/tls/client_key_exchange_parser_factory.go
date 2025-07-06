@@ -1,7 +1,6 @@
 package tls
 
 import (
-	"fmt"
 	"log"
 	
 	"github.com/akitasoftware/akita-libs/akinet"
