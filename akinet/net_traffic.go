@@ -202,6 +202,10 @@ type TLSClientHello struct {
 	// The list of protocols supported by the client, as seen in the ALPN
 	// extension.
 	SupportedProtocols []string
+
+	// The actual 32-byte client random value from the TLS handshake.
+	// This is critical for TLS decryption and key derivation.
+	ClientRandom []byte
 }
 
 var _ ParsedNetworkContent = (*TLSClientHello)(nil)
@@ -225,6 +229,10 @@ type TLSServerHello struct {
 	// certificate, if observed. The server's certificate is encrypted in TLS 1.3,
 	// so this is only populated for TLS 1.2 connections.
 	DNSNames []string
+
+	// The actual 32-byte server random value from the TLS handshake.
+	// This is critical for TLS decryption and key derivation.
+	ServerRandom []byte
 }
 
 var _ ParsedNetworkContent = (*TLSServerHello)(nil)
@@ -282,6 +290,14 @@ type TLSHandshakeMetadata struct {
 	// This is only populated for TLS 1.2 connections with RSA key exchange.
 	EncryptedPreMasterSecret []byte
 
+	// The actual 32-byte client random value from the TLS handshake.
+	// This is critical for TLS decryption and key derivation.
+	ClientRandom []byte
+
+	// The actual 32-byte server random value from the TLS handshake.
+	// This is critical for TLS decryption and key derivation.
+	ServerRandom []byte
+
 	clientHandshakeSeen     bool
 	serverHandshakeSeen     bool
 	clientKeyExchangeSeen   bool
@@ -322,6 +338,12 @@ func (tls *TLSHandshakeMetadata) AddClientHello(hello *TLSClientHello) error {
 
 	tls.SupportedProtocols = append(tls.SupportedProtocols, hello.SupportedProtocols...)
 
+	// Store the actual ClientRandom for TLS decryption
+	if len(hello.ClientRandom) > 0 {
+		tls.ClientRandom = make([]byte, len(hello.ClientRandom))
+		copy(tls.ClientRandom, hello.ClientRandom)
+	}
+
 	return nil
 }
 
@@ -347,6 +369,12 @@ func (tls *TLSHandshakeMetadata) AddServerHello(hello *TLSServerHello) error {
 	}
 
 	tls.SubjectAlternativeNames = append(tls.SubjectAlternativeNames, hello.DNSNames...)
+
+	// Store the actual ServerRandom for TLS decryption
+	if len(hello.ServerRandom) > 0 {
+		tls.ServerRandom = make([]byte, len(hello.ServerRandom))
+		copy(tls.ServerRandom, hello.ServerRandom)
+	}
 
 	return nil
 }

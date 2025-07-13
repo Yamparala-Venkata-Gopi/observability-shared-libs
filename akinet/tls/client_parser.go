@@ -73,8 +73,15 @@ func (parser *tlsClientHelloParser) parse(input memview.MemView) (result akinet.
 	buf := parser.allInput.SubView(tlsRecordHeaderLength_bytes, handshakeMsgEndPos)
 	reader := buf.CreateReader()
 
-	// Seek past some headers.
-	_, err = reader.Seek(handshakeHeaderLength_bytes+clientVersionLength_bytes+clientRandomLength_bytes, io.SeekCurrent)
+	// Seek past the handshake header and client version.
+	_, err = reader.Seek(handshakeHeaderLength_bytes+clientVersionLength_bytes, io.SeekCurrent)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Extract the ClientRandom (32 bytes) - this is critical for TLS decryption!
+	clientRandom := make([]byte, clientRandomLength_bytes)
+	_, err = reader.Read(clientRandom)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -153,6 +160,7 @@ func (parser *tlsClientHelloParser) parse(input memview.MemView) (result akinet.
 		ConnectionID:       parser.connectionID,
 		Hostname:           dnsHostname,
 		SupportedProtocols: protocols,
+		ClientRandom:       clientRandom,
 	}
 
 	return hello, handshakeMsgEndPos, nil
